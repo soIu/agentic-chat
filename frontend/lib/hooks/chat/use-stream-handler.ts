@@ -376,6 +376,7 @@ export function useStreamHandler({
               })
               contentBlocks.push({
                 type: "text",
+                //I think I will change how the file upload works... upload and then tell the AI to grab it from the filesystem is better
                 text: `**File: ${file.name || 'unknown'}**\n\`\`\`\n${decodedContent}\n\`\`\``
               })
             } catch (error) {
@@ -415,7 +416,7 @@ export function useStreamHandler({
       let runId: string | undefined = undefined
       let hasSeenNewResponse = false
 
-      const agentType = "agent"; //Nanti diganti dengan call ke backend
+      const agentType = (await (await fetch('/getCurrentAgent')).json().catch(() => ['agent']))[0];
 
       // Trace metadata for LangSmith observability
       const traceMetadata = {
