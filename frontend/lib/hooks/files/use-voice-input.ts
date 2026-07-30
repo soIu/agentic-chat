@@ -103,7 +103,7 @@ export function useVoiceInput({
       // User can click again to continue recording
       recognition.continuous = false
       recognition.interimResults = true
-      recognition.lang = "en-US"
+      recognition.lang = localStorage.getItem('voiceLanguage') || "id-ID";
       // @ts-expect-error - maxAlternatives exists but not in types
       recognition.maxAlternatives = 1
 

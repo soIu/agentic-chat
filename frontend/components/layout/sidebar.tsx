@@ -255,7 +255,7 @@ export const Sidebar = memo(function Sidebar({
         )}
       </nav>
 
-      <div className="bg-gradient-to-t from-sidebar-accent/10 via-sidebar-accent/5 to-transparent pt-2 pb-0 space-y-0">
+      <div className="bg-gradient-to-t from-sidebar-accent/10 via-sidebar-accent/5 to-transparent pt-2 pb-0 space-y-0" style={{display: 'none'}}>
         <a
           href="https://smith.langchain.com"
           target="_blank"

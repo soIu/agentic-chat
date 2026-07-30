@@ -18,6 +18,8 @@ import { useAuth } from "@/lib/auth"
 
 const AUTH_MODAL_DISMISSED_KEY = "chat-langchain-auth-modal-dismissed"
 
+sessionStorage.setItem(AUTH_MODAL_DISMISSED_KEY, 'true');
+
 interface HeaderProps {
   onNewChat?: () => void
 }
@@ -74,18 +76,21 @@ export function Header({ onNewChat }: HeaderProps) {
         <div className="flex items-center justify-between w-full px-4 sm:px-6">
           <div className="flex items-center">
             <Image
-              src="/assets/images/ChatLangChain-logo.svg"
+              src="/assets/images/LangChain_Symbol_LightBlue.svg"
               alt="Chat LangChain"
-              width={200}
+              width={100}
               height={32}
               className="object-contain"
-              style={{ width: "200px", height: "32px" }}
+              style={{ width: "auto", height: "32px" }}
               priority
             />
+            <span className="ml-2 text-[25px] font-semibold">
+              Chat Agent
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
-            {!loading && !user && (
+            {!loading && !user && (false &&
               <button
                 type="button"
                 onClick={() => setShowAuthModal(true)}

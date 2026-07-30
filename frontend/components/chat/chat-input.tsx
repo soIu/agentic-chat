@@ -203,7 +203,7 @@ export function ChatInput({
                         ? "Initializing..."
                         : isLoading
                           ? "Type your next message..."
-                          : "Ask me anything about LangChain..."
+                          : "Ask me about anything..."
                     }
                     className="relative z-10 min-h-[36px] max-h-[240px] resize-none bg-transparent border-0 w-full px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200 break-words custom-scrollbar"
                     disabled={!userId}

@@ -97,7 +97,7 @@ export function WelcomeScreen({
             />
           </div>
           <h2 className="text-2xl sm:text-4xl font-semibold text-white mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-            What can I help with?
+            What can I help you with?
           </h2>
         </div>
 
@@ -179,7 +179,7 @@ export function WelcomeScreen({
                 onKeyDown={onKeyDown}
                 onPaste={onPaste}
                 maxLength={MAX_INPUT_CHARS}
-                placeholder={userId ? "Ask me anything about LangChain..." : "Initializing..."}
+                placeholder={userId ? "Ask me about anything..." : "Initializing..."}
                 className="relative z-10 min-h-[48px] max-h-[240px] resize-none bg-transparent border-0 w-full px-3 py-3 text-base leading-relaxed text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200 break-words custom-scrollbar"
                 disabled={isLoading || !userId}
                 rows={1}

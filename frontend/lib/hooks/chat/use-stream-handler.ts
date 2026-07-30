@@ -415,7 +415,7 @@ export function useStreamHandler({
       let runId: string | undefined = undefined
       let hasSeenNewResponse = false
 
-      const agentType = "docs_agent"
+      const agentType = "agent"; //Nanti diganti dengan call ke backend
 
       // Trace metadata for LangSmith observability
       const traceMetadata = {

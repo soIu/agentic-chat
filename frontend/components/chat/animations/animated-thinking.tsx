@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from "react"
 
 const thinkingWords = [
   "Thinking...",
-  "Noodling...",
+  /*"Noodling...",
   "Percolating...",
   "Marinating...",
   "Brewing...",
@@ -20,7 +20,7 @@ const thinkingWords = [
   "Pondering...",
   "Conjuring...",
   "Gallivanting...",
-  "Grooving...",
+  "Grooving..."*/
 ]
 
 // Fisher-Yates shuffle algorithm
