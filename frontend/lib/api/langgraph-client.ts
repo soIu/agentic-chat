@@ -33,7 +33,7 @@ export function createLangGraphClient(
   }
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${authToken}`,
+    //Authorization: `Bearer ${authToken}`,
   }
 
   // Optional public app key for deployments that set LANGGRAPH_AUTH_SECRET.
