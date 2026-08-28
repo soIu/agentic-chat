@@ -45,5 +45,9 @@ export interface Message {
 
   // Interruption tracking
   wasInterrupted?: boolean
+
+  // Set when the backend/LangGraph run itself errored (as opposed to the
+  // agent genuinely returning an empty response)
+  hadError?: boolean
 }
 

@@ -340,6 +340,9 @@ export function useStreamHandler({
       let assistantToolCalls: ToolCall[] = []
       let runId: string | undefined = initialRunId
       let hasSeenNewResponse = false
+      // Set when the stream itself reports a backend/LangGraph error (as
+      // opposed to the agent genuinely finishing with an empty response)
+      let streamError: string | undefined
 
       // Initialize from existing message data if resuming
       let existingMessage: Message | undefined
@@ -381,6 +384,20 @@ export function useStreamHandler({
         const isSubgraphEvent = eventType.includes("|")
         const eventParts = eventType.split("|")
         const baseEvent = eventParts[0]
+
+        // LangGraph emits an "error" chunk when the run itself fails
+        // server-side (e.g. an uncaught exception in the graph). Without
+        // this, the loop just ends with empty content and we'd wrongly
+        // show "(No response generated)" as if the agent genuinely had
+        // nothing to say.
+        if (baseEvent === "error") {
+          const message =
+            (data && typeof data === "object" && (data.message || data.error)) ||
+            (typeof data === "string" ? data : null)
+          streamError = String(message || "The agent run failed unexpectedly.")
+          console.error("[Stream] Backend/LangGraph run error:", data)
+          continue
+        }
 
         // Track subgraph outputs when they complete or stream
         if (
@@ -742,12 +759,17 @@ export function useStreamHandler({
               ...m,
               content: wasInterrupted && !assistantContent
                 ? "Response stopped. The agent was interrupted while processing your request."
+                : streamError
+                ? assistantContent
+                  ? `${assistantContent}\n\n⚠️ The agent hit an error before finishing: ${streamError}`
+                  : `⚠️ The agent hit an error and couldn't finish responding: ${streamError}`
                 : assistantContent || "(No response generated)",
               isThinking: false,
               thinkingDuration,
               runId,
               subgraphOutputs: subgraphOutputs.length > 0 ? subgraphOutputs : undefined,
               wasInterrupted,
+              hadError: Boolean(streamError),
             }
           : m
       )
