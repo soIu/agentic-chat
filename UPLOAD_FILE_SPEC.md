@@ -51,6 +51,10 @@ For now, assume `read_file` (and other filesystem tools the agent has) reads fro
 
 ## Suggested (not required) basics
 
-- Limit file size (frontend already caps at 10MB, 50MB for `.har`).
+- Enforce a file size limit here (nginx `client_max_body_size` and/or in
+  `server.py`) — the frontend no longer caps size or file type client-side,
+  so this endpoint is the only gate. A rejected/oversized upload should
+  return a non-2xx status; the frontend surfaces that as an error on the
+  attachment.
 - Sanitize/namespace the filename when saving (avoid path traversal, collisions).
 - Clean up old uploads periodically.

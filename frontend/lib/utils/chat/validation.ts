@@ -44,24 +44,17 @@ export const createImageAttachment = async (file: File): Promise<ImageAttachment
 }
 
 /**
- * Validate if a file is within size limits.
+ * Validate a file before attaching it.
  *
- * No extension/mimetype allowlist: with the 2-step upload flow, non-image
- * files are uploaded to the backend as-is and the agent reads them itself
- * via the read_file tool, so the frontend doesn't need to gatekeep by file
- * type. Images still go through the inline base64 path.
+ * No extension/mimetype allowlist and no client-side size cap: with the
+ * 2-step upload flow, non-image files are uploaded to the backend as-is and
+ * the agent reads them itself via the read_file tool, so the frontend
+ * doesn't need to gatekeep by type or size — nginx/server.py enforces
+ * whatever limit makes sense there and the upload request will just fail
+ * (surfaced via the attachment's uploadStatus: "error") if a file is
+ * rejected. Images still go through the inline base64 path.
  */
 export const validateImageFile = (file: File): { valid: boolean; error?: string } => {
-  // HAR files can be large network captures — allow up to 50MB.
-  // Public CLC does not support HAR analysis; HAR files are ignored before streaming.
-  // All other file types retain the original 10MB limit.
-  const isHar = file.name.toLowerCase().endsWith(".har")
-  const maxSize = isHar ? 50 * 1024 * 1024 : 10 * 1024 * 1024
-  const maxSizeLabel = isHar ? "50MB" : "10MB"
-  if (file.size > maxSize) {
-    return { valid: false, error: `File must be smaller than ${maxSizeLabel}` }
-  }
-
   return { valid: true }
 }
 
