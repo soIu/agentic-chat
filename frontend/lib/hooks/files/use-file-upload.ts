@@ -136,7 +136,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
           continue
         }
 
-        if (!isImage) {
+        /*if (!isImage) {
           const text = await file.text()
           textLength = text.length
 
@@ -149,7 +149,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
             setUploadError(FILE_TOO_LARGE_MESSAGE)
             continue
           }
-        }
+        }*/
 
         // Convert to attachment
         const imageAttachment = await createImageAttachment(file)
