@@ -139,7 +139,6 @@ export function WelcomeScreen({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,.py,.js,.ts,.tsx,.jsx,.java,.cpp,.c,.h,.cs,.go,.rs,.rb,.php,.sh,.bash,.yaml,.yml,.json,.xml,.html,.css,.md,.txt,.log,.sql,.graphql,.r,.swift,.kt,.scala,.har"
                 multiple
                 onChange={onFileSelect}
                 className="hidden"
@@ -153,7 +152,7 @@ export function WelcomeScreen({
                   disabled={isLoading || !userId}
                   className="group h-10 w-10 p-0 mb-0.5 rounded-full bg-muted/50 hover:bg-primary/10 text-muted-foreground hover:text-primary border-0 flex-shrink-0 transition-all duration-200 hover:scale-105 active:scale-95"
                   type="button"
-                  title="Attach files (images, code, logs)"
+                  title="Attach files (any type)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"

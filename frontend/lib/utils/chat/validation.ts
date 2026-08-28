@@ -44,8 +44,12 @@ export const createImageAttachment = async (file: File): Promise<ImageAttachment
 }
 
 /**
- * Validate if a file is supported and within size limits.
- * Supports images, code files, logs, and text files.
+ * Validate if a file is within size limits.
+ *
+ * No extension/mimetype allowlist: with the 2-step upload flow, non-image
+ * files are uploaded to the backend as-is and the agent reads them itself
+ * via the read_file tool, so the frontend doesn't need to gatekeep by file
+ * type. Images still go through the inline base64 path.
  */
 export const validateImageFile = (file: File): { valid: boolean; error?: string } => {
   // HAR files can be large network captures — allow up to 50MB.
@@ -56,49 +60,6 @@ export const validateImageFile = (file: File): { valid: boolean; error?: string 
   const maxSizeLabel = isHar ? "50MB" : "10MB"
   if (file.size > maxSize) {
     return { valid: false, error: `File must be smaller than ${maxSizeLabel}` }
-  }
-
-  // Supported mimetypes
-  const supportedMimeTypes = [
-    // Images
-    "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp",
-    // Text/Code
-    "text/plain", "text/markdown", "text/x-python", "text/x-java",
-    "text/x-c", "text/x-c++", "text/javascript", "text/typescript",
-    "text/html", "text/css", "text/xml", "application/json",
-    "application/javascript", "application/typescript",
-    "application/x-python", "application/x-python-code",
-    "application/x-sh", "text/x-sh", "text/x-log"
-  ]
-
-  // Supported file extensions (fallback if mimetype is not set correctly)
-  const supportedExtensions = [
-    // Images
-    ".jpg", ".jpeg", ".png", ".gif", ".webp",
-    // Code files
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".cpp", ".c", ".h",
-    ".cs", ".go", ".rs", ".rb", ".php", ".sh", ".bash",
-    // Config/Data files
-    ".yaml", ".yml", ".json", ".xml", ".html", ".css", ".md",
-    // Text/Log files
-    ".txt", ".log", ".sql", ".graphql",
-    // Other languages
-    ".r", ".swift", ".kt", ".scala",
-    // Network/Debug files
-    ".har"
-  ]
-
-  const fileName = file.name.toLowerCase()
-  const hasValidExtension = supportedExtensions.some(ext => fileName.endsWith(ext))
-  const hasValidMimetype = supportedMimeTypes.includes(file.type)
-
-  // Accept if either mimetype or extension is valid
-  if (!hasValidMimetype && !hasValidExtension) {
-    const ext = fileName.split('.').pop()?.toLowerCase()
-    return {
-      valid: false,
-      error: `Unsupported file type${ext ? ` (.${ext})` : ''}. Supported: images, code files, logs, configs (see button tooltip for full list)`
-    }
   }
 
   return { valid: true }
