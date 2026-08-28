@@ -255,7 +255,7 @@ export function ChatInterface({
   // Custom Hooks
   // ============================================================================
 
-  const { processStream } = useStreamHandler({
+  const { processStream, resumeStream } = useStreamHandler({
     client,
     threadId,
     setMessages,
@@ -571,6 +571,56 @@ export function ChatInterface({
     loadThreadHistory()
   }, [threadId, client, uiDispatch, isNewThread, langsmithAuth])
 
+  // Reattach to a run that's still executing on the backend when this thread
+  // is (re)opened. Without this, refreshing the page (or switching threads
+  // and back) while the agent is mid-response leaves the UI looking "done"
+  // even though the run keeps going server-side — this picks it back up and
+  // keeps streaming into the chat instead of leaving it stuck.
+  const resumedThreadIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (isNewThread || !client || !threadId) return
+    if (uiState.isLoadingThread) return // wait for history to finish loading first
+    if (resumedThreadIdRef.current === threadId) return // already checked this thread
+    if (activeRunRef.current) return // we're already actively streaming something
+
+    resumedThreadIdRef.current = threadId
+    let cancelled = false
+
+    const resumeActiveRun = async () => {
+      try {
+        const runs = await client.runs.list(threadId, { limit: 10 })
+        const activeRun = runs
+          .filter((run) => run.status === "pending" || run.status === "running")
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+
+        if (!activeRun || cancelled) return
+
+        console.log('Resuming in-progress run on thread open:', activeRun.run_id)
+
+        const assistantMessageId = generateMessageId()
+        activeRunRef.current = { runId: activeRun.run_id, assistantMessageId }
+        shouldInterruptRef.current = false
+        uiDispatch({ type: 'SET_LOADING', payload: true })
+
+        try {
+          await resumeStream(activeRun.run_id, assistantMessageId)
+        } finally {
+          if (!cancelled) {
+            activeRunRef.current = null
+            uiDispatch({ type: 'FINISH_SEND' })
+          }
+        }
+      } catch (error) {
+        console.warn('Unable to check for in-progress runs on thread open:', error)
+      }
+    }
+
+    resumeActiveRun()
+
+    return () => {
+      cancelled = true
+    }
+  }, [threadId, client, isNewThread, uiState.isLoadingThread, resumeStream, uiDispatch])
 
   // Auto-focus textarea when loading completes and userId is available
   useEffect(() => {

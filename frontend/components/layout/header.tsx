@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { LogOut } from "lucide-react"
+import { LogOut, Menu } from "lucide-react"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import { AuthModal } from "@/components/auth/AuthModal"
@@ -22,9 +22,11 @@ sessionStorage.setItem(AUTH_MODAL_DISMISSED_KEY, 'true');
 
 interface HeaderProps {
   onNewChat?: () => void
+  /** Opens the mobile chat-list drawer. Only shown (as a hamburger button) on small screens. */
+  onOpenSidebar?: () => void
 }
 
-export function Header({ onNewChat }: HeaderProps) {
+export function Header({ onNewChat, onOpenSidebar }: HeaderProps) {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const { user, loading, signOut } = useAuth()
@@ -75,6 +77,16 @@ export function Header({ onNewChat }: HeaderProps) {
       <header className="border-b border-border/60 bg-background h-16 flex items-center">
         <div className="flex items-center justify-between w-full px-4 sm:px-6">
           <div className="flex items-center">
+            {onOpenSidebar && (
+              <button
+                type="button"
+                onClick={onOpenSidebar}
+                className="md:hidden mr-3 -ml-1 p-2 rounded-lg text-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors"
+                aria-label="Open chat list"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            )}
             <Image
               src="/assets/images/LangChain_Symbol_LightBlue.svg"
               alt="Chat LangChain"

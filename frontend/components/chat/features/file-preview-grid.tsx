@@ -30,6 +30,18 @@ function FilePreviewCard({ file, onRemove }: { file: ImageAttachment; onRemove: 
 
   return (
     <div className="group relative h-24 rounded-lg border-2 border-border hover:border-primary bg-card/50 hover:bg-muted/50 transition-all flex flex-col overflow-hidden">
+      {/* Upload status for non-image files (2-step upload: attach → upload → send) */}
+      {!isImage && file.uploadStatus === "uploading" && (
+        <div className="absolute top-1 left-1 z-10 h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" title="Uploading..." />
+      )}
+      {!isImage && file.uploadStatus === "error" && (
+        <div
+          className="absolute top-1 left-1 z-10 h-4 w-4 rounded-full bg-destructive flex items-center justify-center text-white text-[10px] font-bold"
+          title={file.uploadErrorMessage || "Upload failed"}
+        >
+          !
+        </div>
+      )}
       {isImage ? (
         // Image preview
         <div className="relative h-full w-full">

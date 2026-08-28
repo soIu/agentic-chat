@@ -19,6 +19,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts"
 
 function DashboardContent() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [showToolCalls, setShowToolCalls] = useState(false)
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false)
 
@@ -181,6 +182,7 @@ function DashboardContent() {
 
     setSelectedThreadOwner({ threadId: newThreadId, ownerId: userId })
     setThreadId(newThreadId)
+    setIsMobileSidebarOpen(false)
   }
 
   // Switch to an existing thread
@@ -442,10 +444,13 @@ function DashboardContent() {
           onSelectThread={handleSelectThread}
           onDeleteThread={handleDeleteThread}
           isLoading={threadsLoading}
+          isMobileOpen={isMobileSidebarOpen}
+          onMobileClose={() => setIsMobileSidebarOpen(false)}
         />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header
           onNewChat={handleNewChat}
+          onOpenSidebar={() => setIsMobileSidebarOpen(true)}
         />
         {threadId && (
           <ChatInterface

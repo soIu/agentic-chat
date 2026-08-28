@@ -11,6 +11,7 @@
 import { useState, useCallback } from "react"
 import type { ImageAttachment } from "../../types"
 import { createImageAttachment, validateImageFile } from "../../utils/chat"
+import { uploadFile } from "../../api/files"
 import {
   FILE_TOO_LARGE_MESSAGE,
   IMAGE_UNSUPPORTED_MODEL_MESSAGE,
@@ -74,6 +75,40 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
   const disableImageUploads = options.disableImageUploads ?? false
 
   /**
+   * Step 1 of the 2-step file upload: send a non-image file to the backend
+   * right away so it's ready on disk by the time the user hits send. Updates
+   * the attachment's uploadStatus/path in place once it settles.
+   */
+  const uploadAttachedFile = useCallback((attachmentId: string, file: File) => {
+    setAttachedFiles(prev =>
+      prev.map(f => (f.id === attachmentId ? { ...f, uploadStatus: "uploading" } : f))
+    )
+
+    uploadFile(file)
+      .then(({ path }) => {
+        setAttachedFiles(prev =>
+          prev.map(f =>
+            f.id === attachmentId ? { ...f, uploadStatus: "uploaded", path } : f
+          )
+        )
+      })
+      .catch((error) => {
+        console.error(`Failed to upload file ${file.name}:`, error)
+        setAttachedFiles(prev =>
+          prev.map(f =>
+            f.id === attachmentId
+              ? {
+                  ...f,
+                  uploadStatus: "error",
+                  uploadErrorMessage: error instanceof Error ? error.message : "Upload failed",
+                }
+              : f
+          )
+        )
+      })
+  }, [])
+
+  /**
    * Process multiple files and add them to attached files list.
    * Validates each file and converts to base64.
    */
@@ -121,12 +156,18 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
         imageAttachment.textLength = textLength
         setAttachedFiles(prev => [...prev, imageAttachment])
         acceptedTextLength += textLength ?? 0
+
+        // Kick off step 1 of the 2-step upload for non-image files so the
+        // backend already has it on disk by the time the message is sent.
+        if (!isImage) {
+          uploadAttachedFile(imageAttachment.id, file)
+        }
       } catch (error) {
         console.error("Error processing file:", error)
         setUploadError("Failed to process file")
       }
     }
-  }, [attachedFiles, disableImageUploads, getInputLength])
+  }, [attachedFiles, disableImageUploads, getInputLength, uploadAttachedFile])
 
   /**
    * Handle file selection from input element.

@@ -12,6 +12,7 @@
  * - Usage metadata fetching from LangSmith (tokens and costs)
  * - Public share link generation with retry logic
  * - Stream interruption support
+ * - Resuming a run that was still in progress when the thread was reopened
  * - SSR-safe implementation
  *
  * Architecture:
@@ -36,6 +37,7 @@ import {
   updateMessageInList,
 } from "../../utils/chat"
 import { shareRun, readRun, type LangSmithAuth } from "../../api/langsmith"
+import { getCurrentAgentType } from "../../api/agent"
 
 // ============================================================================
 // Constants
@@ -128,6 +130,15 @@ interface UseStreamHandlerReturn {
     userContent: string,
     assistantMessageId: string,
     images?: ImageAttachment[]
+  ) => Promise<{ assistantContent: string; runId: string | undefined }>
+  /**
+   * Reattach to a run that's already in progress on the backend (e.g. one
+   * that was still running when the thread was reopened) and keep streaming
+   * its output into the given message instead of starting a new run.
+   */
+  resumeStream: (
+    runId: string,
+    assistantMessageId: string
   ) => Promise<{ assistantContent: string; runId: string | undefined }>
 }
 
@@ -308,142 +319,27 @@ export function useStreamHandler({
   )
 
   /**
-   * Processes the stream of agent responses.
+   * Shared stream-consumption loop used by both processStream (new runs) and
+   * resumeStream (reattaching to an in-progress run). Processes stream
+   * chunks, updates message state in real-time, and triggers metadata/share
+   * link fetching once the run completes.
    *
-   * Main function that handles:
-   * - Initiating the stream with LangGraph SDK
-   * - Processing various stream event types (values, updates, messages, messages/partial)
-   * - Tracking tool calls, thinking steps, and subagent outputs
-   * - Updating message state in real-time
-   * - Handling stream interruption
-   * - Triggering metadata and share link fetching after completion
-   *
-   * @param userContent - User's message content
+   * @param streamResponse - Async generator of stream chunks (from either
+   *   `client.runs.stream` or `client.runs.joinStream`)
    * @param assistantMessageId - ID for the assistant's response message
-   * @param images - Optional image attachments
-   * @returns Promise with assistant content and run ID
+   * @param initialRunId - Known run ID, if already available (resumeStream);
+   *   otherwise discovered from the stream itself as chunks arrive
    */
-  const processStream = useCallback(
-    async (userContent: string, assistantMessageId: string, images?: ImageAttachment[]) => {
-      if (!LANGGRAPH_API_URL) {
-        throw new Error(
-          "Missing LANGGRAPH_API_URL; cannot invoke LangGraph"
-        )
-      }
-
-      if (!client) {
-        throw new Error(
-          "Client not initialized; cannot invoke LangGraph. User ID may not be loaded yet."
-        )
-      }
-
-      // Format message content - use multimodal format if files are present
-      let messageContent: any
-      if (images && images.length > 0) {
-        // Build multimodal message with text and files
-        const contentBlocks: any[] = [
-          {
-            type: "text",
-            text: userContent || "Please analyze the attached file(s)."
-          }
-        ]
-
-        // Process each file
-        for (const file of images) {
-          // Public CLC does not support HAR analysis; avoid sending large traces to the docs agent.
-          if (file.name?.toLowerCase().endsWith(".har")) continue
-
-          const isImage = file.mimeType?.startsWith('image/')
-
-          if (isImage) {
-            // Image files: send as base64 image_url
-            contentBlocks.push({
-              type: "image_url",
-              image_url: {
-                url: `data:${file.mimeType};base64,${file.base64}`
-              }
-            })
-          } else {
-            // Text files: decode base64 and send as text block
-            try {
-              // Decode base64 to get text content
-              const decodedContent = atob(file.base64 || '')
-              console.log(`📄 Decoded file ${file.name}:`, {
-                mimeType: file.mimeType,
-                size: file.size,
-                contentLength: decodedContent.length,
-                preview: decodedContent.slice(0, 100)
-              })
-              contentBlocks.push({
-                type: "text",
-                //I think I will change how the file upload works... upload and then tell the AI to grab it from the filesystem is better
-                text: `**File: ${file.name || 'unknown'}**\n\`\`\`\n${decodedContent}\n\`\`\``
-              })
-            } catch (error) {
-              console.error(`Failed to decode file ${file.name}:`, error)
-              contentBlocks.push({
-                type: "text",
-                text: `[Failed to decode file: ${file.name}]`
-              })
-            }
-          }
-        }
-
-        messageContent = contentBlocks
-      } else {
-        // Text-only message
-        messageContent = userContent
-      }
-
-      // Log the final message being sent
-      console.log('📤 Sending message to agent:', {
-        hasFiles: images && images.length > 0,
-        fileCount: images?.length || 0,
-        contentBlocks: Array.isArray(messageContent) ? messageContent.length : 1,
-        messagePreview: Array.isArray(messageContent)
-          ? messageContent.map(block => `${block.type}: ${block.text?.slice(0, 50) || 'image'}...`)
-          : messageContent.slice(0, 100)
-      })
-
-      const input = {
-        messages: [{ role: "user", content: messageContent }],
-      }
-
-      const recursionLimit = 100
-
+  const consumeStream = useCallback(
+    async (
+      streamResponse: AsyncIterable<{ event: any; data: any }>,
+      assistantMessageId: string,
+      initialRunId?: string
+    ) => {
       let assistantContent = ""
       let assistantToolCalls: ToolCall[] = []
-      let runId: string | undefined = undefined
+      let runId: string | undefined = initialRunId
       let hasSeenNewResponse = false
-
-      const agentType = (await (await fetch('/getCurrentAgent')).json().catch(() => ['agent']))[0];
-
-      // Trace metadata for LangSmith observability
-      const traceMetadata = {
-        user_id: userId || "unknown",
-        ...(userEmail && userEmail !== userId ? { user_email: userEmail } : {}),
-        ...(userName && !userName.startsWith("User") ? { user_name: userName } : {}),
-        source_type: "Chat-LangChain",
-        graph: agentType,
-      }
-
-      const streamResponse = client.runs.stream(threadId, agentType, {
-        input,
-        config: {
-          recursion_limit: recursionLimit,
-          tags: ["Chat-LangChain", agentType],
-          metadata: traceMetadata,
-        } as any,
-        streamMode: ["values", "updates", "messages"],
-        streamSubgraphs: true,
-        ifNotExists: "create",
-        onRunCreated: (metadata: { run_id?: string }) => {
-          if (metadata.run_id) {
-            runId = metadata.run_id
-            onRunCreated?.(metadata.run_id)
-          }
-        },
-      })
 
       // Initialize from existing message data if resuming
       let existingMessage: Message | undefined
@@ -864,7 +760,184 @@ export function useStreamHandler({
     }
 
     return { assistantContent, runId }
-  }, [client, threadId, setMessages, fetchUsageMetadata, generateShareLink, onRunCreated, userId, userEmail, userName])
+  }, [setMessages, fetchUsageMetadata, generateShareLink])
 
-  return { processStream }
+  /**
+   * Processes the stream of agent responses.
+   *
+   * Main function that handles:
+   * - Initiating the stream with LangGraph SDK
+   * - Processing various stream event types (values, updates, messages, messages/partial)
+   * - Tracking tool calls, thinking steps, and subagent outputs
+   * - Updating message state in real-time
+   * - Handling stream interruption
+   * - Triggering metadata and share link fetching after completion
+   *
+   * @param userContent - User's message content
+   * @param assistantMessageId - ID for the assistant's response message
+   * @param images - Optional image attachments
+   * @returns Promise with assistant content and run ID
+   */
+  const processStream = useCallback(
+    async (userContent: string, assistantMessageId: string, images?: ImageAttachment[]) => {
+      if (!LANGGRAPH_API_URL) {
+        throw new Error(
+          "Missing LANGGRAPH_API_URL; cannot invoke LangGraph"
+        )
+      }
+
+      if (!client) {
+        throw new Error(
+          "Client not initialized; cannot invoke LangGraph. User ID may not be loaded yet."
+        )
+      }
+
+      // Format message content - use multimodal format if files are present
+      let messageContent: any
+      if (images && images.length > 0) {
+        // Build multimodal message with text and files
+        const contentBlocks: any[] = [
+          {
+            type: "text",
+            text: userContent || "Please analyze the attached file(s)."
+          }
+        ]
+
+        // Process each file
+        for (const file of images) {
+          // Public CLC does not support HAR analysis; avoid sending large traces to the docs agent.
+          if (file.name?.toLowerCase().endsWith(".har")) continue
+
+          const isImage = file.mimeType?.startsWith('image/')
+
+          if (isImage) {
+            // Image files: send as base64 image_url
+            contentBlocks.push({
+              type: "image_url",
+              image_url: {
+                url: `data:${file.mimeType};base64,${file.base64}`
+              }
+            })
+          } else if (file.uploadStatus === "uploaded" && file.path) {
+            // 2-step upload: the file is already sitting on the backend's
+            // filesystem, so just point the agent at it instead of inlining
+            // the content. The agent is expected to use `read_file` (or
+            // another filesystem tool) to pull it in.
+            contentBlocks.push({
+              type: "text",
+              text: `**Attached file: ${file.name || 'unknown'}**\nUploaded to: ${file.path}\nUse the read_file tool (or another filesystem tool) to read this file's contents before answering.`
+            })
+          } else if (file.uploadStatus === "error") {
+            contentBlocks.push({
+              type: "text",
+              text: `[Failed to upload file: ${file.name || 'unknown'}${file.uploadErrorMessage ? ` — ${file.uploadErrorMessage}` : ''}]`
+            })
+          } else {
+            // Upload hasn't resolved yet (or this file predates the 2-step
+            // flow) — fall back to inlining the decoded text content so we
+            // never silently drop the file's content.
+            try {
+              const decodedContent = atob(file.base64 || '')
+              console.log(`📄 Decoded file ${file.name}:`, {
+                mimeType: file.mimeType,
+                size: file.size,
+                contentLength: decodedContent.length,
+                preview: decodedContent.slice(0, 100)
+              })
+              contentBlocks.push({
+                type: "text",
+                text: `**File: ${file.name || 'unknown'}**\n\`\`\`\n${decodedContent}\n\`\`\``
+              })
+            } catch (error) {
+              console.error(`Failed to decode file ${file.name}:`, error)
+              contentBlocks.push({
+                type: "text",
+                text: `[Failed to decode file: ${file.name}]`
+              })
+            }
+          }
+        }
+
+        messageContent = contentBlocks
+      } else {
+        // Text-only message
+        messageContent = userContent
+      }
+
+      // Log the final message being sent
+      console.log('📤 Sending message to agent:', {
+        hasFiles: images && images.length > 0,
+        fileCount: images?.length || 0,
+        contentBlocks: Array.isArray(messageContent) ? messageContent.length : 1,
+        messagePreview: Array.isArray(messageContent)
+          ? messageContent.map(block => `${block.type}: ${block.text?.slice(0, 50) || 'image'}...`)
+          : messageContent.slice(0, 100)
+      })
+
+      const input = {
+        messages: [{ role: "user", content: messageContent }],
+      }
+
+      const recursionLimit = 100
+
+      const agentType = await getCurrentAgentType()
+
+      // Trace metadata for LangSmith observability
+      const traceMetadata = {
+        user_id: userId || "unknown",
+        ...(userEmail && userEmail !== userId ? { user_email: userEmail } : {}),
+        ...(userName && !userName.startsWith("User") ? { user_name: userName } : {}),
+        source_type: "Chat-LangChain",
+        graph: agentType,
+      }
+
+      const streamResponse = client.runs.stream(threadId, agentType, {
+        input,
+        config: {
+          recursion_limit: recursionLimit,
+          tags: ["Chat-LangChain", agentType],
+          metadata: traceMetadata,
+        } as any,
+        streamMode: ["values", "updates", "messages"],
+        streamSubgraphs: true,
+        ifNotExists: "create",
+        onRunCreated: (metadata: { run_id?: string }) => {
+          if (metadata.run_id) {
+            onRunCreated?.(metadata.run_id)
+          }
+        },
+      })
+
+      return consumeStream(streamResponse, assistantMessageId)
+    },
+    [client, threadId, consumeStream, onRunCreated, userId, userEmail, userName]
+  )
+
+  /**
+   * Reattach to a run that's already in progress on the backend (e.g. the
+   * thread was reopened while its last run was still executing) and keep
+   * streaming its output into the given message, instead of starting a new
+   * run.
+   *
+   * @param runId - ID of the already-running LangGraph run
+   * @param assistantMessageId - ID of the message to keep streaming into
+   */
+  const resumeStream = useCallback(
+    async (runId: string, assistantMessageId: string) => {
+      if (!client) {
+        throw new Error(
+          "Client not initialized; cannot resume LangGraph run. User ID may not be loaded yet."
+        )
+      }
+
+      const streamResponse = client.runs.joinStream(threadId, runId, {
+        streamMode: ["values", "updates", "messages"],
+      })
+
+      return consumeStream(streamResponse, assistantMessageId, runId)
+    },
+    [client, threadId, consumeStream]
+  )
+
+  return { processStream, resumeStream }
 }

@@ -93,14 +93,13 @@ export const validateImageFile = (file: File): { valid: boolean; error?: string 
   const hasValidMimetype = supportedMimeTypes.includes(file.type)
 
   // Accept if either mimetype or extension is valid
-  /*if (!hasValidMimetype && !hasValidExtension) {
+  if (!hasValidMimetype && !hasValidExtension) {
     const ext = fileName.split('.').pop()?.toLowerCase()
     return {
       valid: false,
       error: `Unsupported file type${ext ? ` (.${ext})` : ''}. Supported: images, code files, logs, configs (see button tooltip for full list)`
     }
-  }*/
-  //Continue the 2-step file upload from here
+  }
 
   return { valid: true }
 }

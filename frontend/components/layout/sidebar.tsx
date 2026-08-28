@@ -42,6 +42,10 @@ interface SidebarProps {
   onSelectThread: (threadId: string) => void
   onDeleteThread: (threadId: string) => void
   isLoading?: boolean
+  /** Whether the mobile drawer version of the chat list is open. */
+  isMobileOpen?: boolean
+  /** Called to close the mobile drawer (backdrop click, selecting a thread, etc). */
+  onMobileClose?: () => void
 }
 
 function getRelativeTime(date: Date): string {
@@ -100,6 +104,8 @@ export const Sidebar = memo(function Sidebar({
   onSelectThread,
   onDeleteThread,
   isLoading = false,
+  isMobileOpen = false,
+  onMobileClose,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -122,7 +128,8 @@ export const Sidebar = memo(function Sidebar({
   // Memoize event handlers to prevent unnecessary re-renders
   const handleSelectThread = useCallback((threadId: string) => {
     onSelectThread(threadId)
-  }, [onSelectThread])
+    onMobileClose?.()
+  }, [onSelectThread, onMobileClose])
 
   const handleDeleteThread = useCallback((threadId: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -175,22 +182,93 @@ export const Sidebar = memo(function Sidebar({
     )
   }, [currentThreadId, handleSelectThread, handleDeleteThread])
 
+  // Mobile chat list: the desktop <aside> below is `hidden md:flex`, so on
+  // small screens there was previously no way to see or open the thread
+  // list at all. This renders the same thread list as a slide-in drawer,
+  // triggered by the hamburger button in the Header on mobile.
+  const mobileDrawer = isMobileOpen ? (
+    <div className="fixed inset-0 z-50 md:hidden">
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onMobileClose}
+        aria-hidden="true"
+      />
+      <aside className="relative h-full w-72 max-w-[80vw] bg-gradient-to-b from-sidebar via-sidebar-light to-sidebar-lighter border-r border-border/60 shadow-depth-md flex flex-col">
+        <div className="px-3 pt-[13px] pb-[14px] border-b border-border/60 bg-gradient-to-r from-sidebar-accent/20 via-sidebar-accent/10 to-transparent">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Threads
+            </span>
+            <Button variant="ghost" size="icon" onClick={onMobileClose} className="hover:bg-sidebar-primary/10 hover:text-sidebar-primary transition-all duration-200 rounded-lg" aria-label="Close thread list">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="px-3 py-2 bg-gradient-to-r from-sidebar-accent/5 via-transparent to-transparent">
+          <div className="relative group">
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 z-10">
+              <Search className="w-4 h-4 text-muted-foreground/70 group-focus-within:text-primary transition-all duration-200" />
+            </div>
+            <Input
+              type="text"
+              placeholder="Search threads..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-8 h-10 text-sm bg-background/80 backdrop-blur-sm border-border/40 focus:border-primary/60 focus:bg-background/90 rounded-lg"
+            />
+          </div>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-2 bg-gradient-to-b from-sidebar-accent/5 via-transparent to-sidebar-accent/10 custom-scrollbar">
+          {isLoading ? (
+            <div className="px-6 py-8 text-center">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-xs text-muted-foreground">Loading conversations...</p>
+            </div>
+          ) : searchQuery && filteredThreads.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+              <div className="font-medium mb-1">No results found</div>
+              <div className="text-xs">Try a different search term</div>
+            </div>
+          ) : filteredThreads.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+              <div className="font-medium mb-1">No conversations yet</div>
+              <div className="text-xs">Start chatting to see your threads here!</div>
+            </div>
+          ) : (
+            <>
+              {renderThreadGroup(today, "Today")}
+              {renderThreadGroup(yesterday, "Yesterday")}
+              {renderThreadGroup(last7Days, "Previous 7 Days")}
+              {renderThreadGroup(older, "Older")}
+            </>
+          )}
+        </nav>
+      </aside>
+    </div>
+  ) : null
+
   // Early return for collapsed state (after all hooks)
   if (isCollapsed) {
     return (
-      <aside className="hidden md:flex w-16 bg-gradient-to-b from-sidebar via-sidebar-light to-sidebar border-r border-border/60 flex-col shadow-depth-sm">
-        <div className="px-3 py-4 border-b border-border/60 h-16 flex items-center justify-center">
-          <Button variant="ghost" size="icon" onClick={onToggle} className="hover:bg-sidebar-primary/10 hover:text-sidebar-primary transition-all duration-200 shadow-depth-xs hover:shadow-depth-hover rounded-lg">
-            <PanelLeft className="w-5 h-5" />
-          </Button>
-        </div>
-      </aside>
+      <>
+        {mobileDrawer}
+        <aside className="hidden md:flex w-16 bg-gradient-to-b from-sidebar via-sidebar-light to-sidebar border-r border-border/60 flex-col shadow-depth-sm">
+          <div className="px-3 py-4 border-b border-border/60 h-16 flex items-center justify-center">
+            <Button variant="ghost" size="icon" onClick={onToggle} className="hover:bg-sidebar-primary/10 hover:text-sidebar-primary transition-all duration-200 shadow-depth-xs hover:shadow-depth-hover rounded-lg">
+              <PanelLeft className="w-5 h-5" />
+            </Button>
+          </div>
+        </aside>
+      </>
     )
   }
 
   return (
     <>
       <style>{scrollbarStyles}</style>
+      {mobileDrawer}
       <aside className="hidden md:flex w-56 bg-gradient-to-b from-sidebar via-sidebar-light to-sidebar-lighter border-r border-border/60 flex-col shadow-depth-md">
         <div className="px-3 pt-[13px] pb-[14px] border-b border-border/60 bg-gradient-to-r from-sidebar-accent/20 via-sidebar-accent/10 to-transparent">
           <div className="flex items-center justify-between">
