@@ -584,8 +584,17 @@ export function ChatInterface({
     if (activeRunRef.current) return // we're already actively streaming something
 
     resumedThreadIdRef.current = threadId
-    let cancelled = false
+    const myThreadId = threadId
 
+    // CATATAN RACE (ditemukan 2026-08-29 via test Playwright dari server #2):
+    // efek ini dulu memakai flag `cancelled` di cleanup. Karena
+    // uiState.isLoadingThread ada di deps, load history yang set isLoadingThread
+    // TEPAT saat runs.list() sedang berjalan me-trigger re-run efek ->
+    // cleanup membatalkan resume yang sedang jalan -> hasil runs.list dibuang
+    // diam-diam -> re-run berikutnya keluar di guard resumedThreadIdRef di
+    // atas -> resume mati total tanpa error (joinStream tak pernah dipanggil).
+    // Fix: cleanup tidak lagi membatalkan; resume jalan sampai tuntas dan
+    // hanya berhenti sendiri kalau user pindah thread (cek ref di bawah).
     const resumeActiveRun = async () => {
       try {
         const runs = await client.runs.list(threadId, { limit: 10 })
@@ -593,7 +602,8 @@ export function ChatInterface({
           .filter((run) => run.status === "pending" || run.status === "running")
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
 
-        if (!activeRun || cancelled) return
+        if (!activeRun) return
+        if (resumedThreadIdRef.current !== myThreadId) return // user pindah thread
 
         console.log('Resuming in-progress run on thread open:', activeRun.run_id)
 
@@ -605,7 +615,9 @@ export function ChatInterface({
         try {
           await resumeStream(activeRun.run_id, assistantMessageId)
         } finally {
-          if (!cancelled) {
+          // Jangan bersih-bersih kalau thread sudah berganti (milik resume
+          // thread yang BARU -- jangan menimpa state-nya).
+          if (resumedThreadIdRef.current === myThreadId) {
             activeRunRef.current = null
             uiDispatch({ type: 'FINISH_SEND' })
           }
@@ -616,10 +628,6 @@ export function ChatInterface({
     }
 
     resumeActiveRun()
-
-    return () => {
-      cancelled = true
-    }
   }, [threadId, client, isNewThread, uiState.isLoadingThread, resumeStream, uiDispatch])
 
   // Auto-focus textarea when loading completes and userId is available
