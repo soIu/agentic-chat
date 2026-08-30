@@ -821,7 +821,7 @@ export function ChatInterface({
     // tidak cocok (cuma no-op 202).
     if (client && threadId) {
       try {
-        await client.runs.cancel(threadId, activeRun?.runId)
+        await client.runs.cancel(threadId, activeRun?.runId || '')
       } catch (error) {
         console.warn("Unable to cancel LangGraph run:", error)
       }
