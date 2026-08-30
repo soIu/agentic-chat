@@ -815,13 +815,16 @@ export function ChatInterface({
     }
 
     // Selalu coba cancel selama kita tahu threadId, walau activeRunRef belum
-    // terisi (race dengan resume-effect) -- runId boleh undefined, backend
+    // terisi (race dengan resume-effect) -- runId boleh null, backend
     // PID-kill (upload_server.py) mencocokkan proses cuma lewat thread_id
     // jadi tetap berhasil; server.py sendiri juga tidak error kalau run_id
-    // tidak cocok (cuma no-op 202).
+    // tidak cocok (cuma no-op 202). String KOSONG tidak boleh dipakai di
+    // sini -- jadi "/runs//cancel" (slash ganda) yang gagal di-route nginx
+    // maupun FastAPI (keduanya butuh >=1 karakter di segmen run_id), beda
+    // dengan `null` yang tetap ter-serialize jadi segmen "null" (non-kosong).
     if (client && threadId) {
       try {
-        await client.runs.cancel(threadId, activeRun?.runId || '')
+        await client.runs.cancel(threadId, (activeRun?.runId ?? null) as string)
       } catch (error) {
         console.warn("Unable to cancel LangGraph run:", error)
       }
