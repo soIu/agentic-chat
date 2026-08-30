@@ -809,13 +809,19 @@ export function ChatInterface({
     uiDispatch({ type: 'SET_STOPPING', payload: true })
     shouldInterruptRef.current = true
     const activeRun = activeRunRef.current
-    if (!activeRun) return
 
-    activeRun.cancelRequested = true
+    if (activeRun) {
+      activeRun.cancelRequested = true
+    }
 
-    if (client && activeRun.runId) {
+    // Selalu coba cancel selama kita tahu threadId, walau activeRunRef belum
+    // terisi (race dengan resume-effect) -- runId boleh undefined, backend
+    // PID-kill (upload_server.py) mencocokkan proses cuma lewat thread_id
+    // jadi tetap berhasil; server.py sendiri juga tidak error kalau run_id
+    // tidak cocok (cuma no-op 202).
+    if (client && threadId) {
       try {
-        await client.runs.cancel(threadId, activeRun.runId)
+        await client.runs.cancel(threadId, activeRun?.runId)
       } catch (error) {
         console.warn("Unable to cancel LangGraph run:", error)
       }
