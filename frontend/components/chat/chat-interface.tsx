@@ -912,11 +912,11 @@ export function ChatInterface({
     }
   }, [uiState.isLoading, uiState.isRegenerating, messages, processStream, onThreadUpdate, threadId, uiDispatch])
 
-  const handleCopy = async (content: string, messageId: string) => {
+  const handleCopy = useCallback(async (content: string, messageId: string) => {
     await navigator.clipboard.writeText(content)
     uiDispatch({ type: 'SET_COPIED_ID', payload: messageId })
     setTimeout(() => uiDispatch({ type: 'SET_COPIED_ID', payload: null }), 2000)
-  }
+  }, [uiDispatch])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
