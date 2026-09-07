@@ -157,11 +157,13 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
         setAttachedFiles(prev => [...prev, imageAttachment])
         acceptedTextLength += textLength ?? 0
 
-        // Kick off step 1 of the 2-step upload for non-image files so the
-        // backend already has it on disk by the time the message is sent.
-        if (!isImage) {
-          uploadAttachedFile(imageAttachment.id, file)
-        }
+        // Kick off step 1 of the 2-step upload (images included -- base64
+        // is only kept around as a last-resort fallback if send happens
+        // before the upload settles; see use-stream-handler.ts). Sending
+        // images as inline base64 blows up the transcript that gets
+        // replayed every turn, which is what caused "Prompt terlalu
+        // panjang" errors on threads with photo attachments.
+        uploadAttachedFile(imageAttachment.id, file)
       } catch (error) {
         console.error("Error processing file:", error)
         setUploadError("Failed to process file")
@@ -217,13 +219,17 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
           const imageAttachment = await createImageAttachment(file)
           setAttachedFiles(prev => [...prev, imageAttachment])
           console.log('Pasted image from clipboard:', file.name || 'screenshot')
+
+          // Same 2-step upload as drag/drop/file-select -- pasted images
+          // need this too, otherwise they'd always fall back to base64.
+          uploadAttachedFile(imageAttachment.id, file)
         } catch (error) {
           console.error("Error processing pasted image:", error)
           setUploadError("Failed to process pasted image")
         }
       }
     }
-  }, [disableImageUploads])
+  }, [disableImageUploads, uploadAttachedFile])
 
   /**
    * Handle drag over event.

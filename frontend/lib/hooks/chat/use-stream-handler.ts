@@ -832,27 +832,36 @@ export function useStreamHandler({
 
           const isImage = file.mimeType?.startsWith('image/')
 
-          if (isImage) {
-            // Image files: send as base64 image_url
-            contentBlocks.push({
-              type: "image_url",
-              image_url: {
-                url: `data:${file.mimeType};base64,${file.base64}`
-              }
-            })
-          } else if (file.uploadStatus === "uploaded" && file.path) {
-            // 2-step upload: the file is already sitting on the backend's
-            // filesystem, so just point the agent at it instead of inlining
-            // the content. The agent is expected to use `read_file` (or
-            // another filesystem tool) to pull it in.
+          if (file.uploadStatus === "uploaded" && file.path) {
+            // 2-step upload (images included): the file is already sitting
+            // on the backend's filesystem, so just point the agent at it
+            // instead of inlining the content. For images this matters a
+            // lot -- sending base64 inline used to bloat the transcript
+            // that gets replayed every turn, causing "Prompt terlalu
+            // panjang" once a thread had a photo attachment (a single
+            // photo can be several MB as base64). Claude Code's Read tool
+            // can view an image directly from a filesystem path, same as
+            // it reads any other file.
             contentBlocks.push({
               type: "text",
-              text: `**Attached file: ${file.name || 'unknown'}**\nUploaded to: ${file.path}\nUse the read_file tool (or another filesystem tool) to read this file's contents before answering.`
+              text: isImage
+                ? `**Attached image: ${file.name || 'unknown'}**\nUploaded to: ${file.path}\nUse the Read tool to view this image before answering.`
+                : `**Attached file: ${file.name || 'unknown'}**\nUploaded to: ${file.path}\nUse the read_file tool (or another filesystem tool) to read this file's contents before answering.`
             })
           } else if (file.uploadStatus === "error") {
             contentBlocks.push({
               type: "text",
               text: `[Failed to upload file: ${file.name || 'unknown'}${file.uploadErrorMessage ? ` — ${file.uploadErrorMessage}` : ''}]`
+            })
+          } else if (isImage) {
+            // Upload hasn't settled yet (send happened before step 1
+            // finished) -- fall back to inline base64 so the image isn't
+            // silently dropped. Should be rare in practice.
+            contentBlocks.push({
+              type: "image_url",
+              image_url: {
+                url: `data:${file.mimeType};base64,${file.base64}`
+              }
             })
           } else {
             // Upload hasn't resolved yet (or this file predates the 2-step
